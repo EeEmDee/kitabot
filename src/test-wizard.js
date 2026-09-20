@@ -103,7 +103,8 @@ console.log(`Running wizard tests against today = ${today}\n`);
     'abbrechen',
   ]);
   check('past date rejected with clear message', replies[4].includes('Vergangenheit'));
-  check('abbrechen cancels the flow', replies.at(-1) === 'Vorgang abgebrochen.');
+  check('abbrechen cancels the flow', replies.at(-1).startsWith('Vorgang abgebrochen.'));
+  check('abbrechen also shows the main menu again in the same reply', replies.at(-1).includes('Was moechtest du tun'));
 }
 
 // --- range (closure) reminder ---
@@ -358,27 +359,64 @@ console.log(`Running wizard tests against today = ${today}\n`);
   );
 }
 
-// --- "0 - Abbrechen" as a visible menu option (not just the typed hint) ---
+// --- unified menu template: every menu leads with "0 - Abbrechen", right
+// after the question, before the numbered choices - and cancelling always
+// clears state AND shows the main menu again in the same reply. ---
 {
+  // Helper: every menu's lines, with any leading "" (blank prompt lines
+  // some replies carry) stripped, so we can check exact line positions.
+  const lines = (text) => text.split('\n');
+
+  const mainMenuReply = await converse('templatecheck0@s.whatsapp.net', ['irgendwas-unbekanntes']);
+  const mainLines = lines(mainMenuReply[0]);
+  check('main menu: line 0 is the question', mainLines[0].includes('Was moechtest du tun'));
+  check('main menu: line 1 is "0 - Abbrechen"', mainLines[1] === '0 - Abbrechen');
+  check('main menu: line 2 is option 1', mainLines[2].startsWith('1 -'));
+
   const menus = await converse('menucancel@s.whatsapp.net', ['1', 'Testtext', 'Peter']);
-  check('recurrence menu lists "0 - Abbrechen"', menus[2].includes('0 - Abbrechen'));
+  const recurrenceLines = lines(menus[2]);
+  check('recurrence menu: line 0 is the question', recurrenceLines[0].includes('Wie oft'));
+  check('recurrence menu: line 1 is "0 - Abbrechen"', recurrenceLines[1] === '0 - Abbrechen');
+  check('recurrence menu: line 2 is option 1', recurrenceLines[2].startsWith('1 -'));
 
   const cancelled = await converse('menucancel2@s.whatsapp.net', ['1', 'Testtext', 'Peter', '0']);
-  check('choosing 0 at the recurrence menu cancels', cancelled[3] === 'Vorgang abgebrochen.');
+  check('choosing 0 at the recurrence menu cancels', cancelled[3].startsWith('Vorgang abgebrochen.'));
+  check('choosing 0 also shows the main menu again in the same reply', cancelled[3].includes('Was moechtest du tun'));
   const afterCancel = await converse('menucancel2@s.whatsapp.net', ['irgendwas']);
   check('after cancelling via 0, state is reset to the main menu', afterCancel[0].includes('Was moechtest du tun'));
 
-  // weekday menu (weekly recurrence)
+  // weekday menu (weekly recurrence) - no question line of its own, the
+  // caller prefixes one, but "0" must still be the very next line after it.
+  const weekdayMenuReply = await converse('weekdaymenucheck@s.whatsapp.net', ['1', 'Testtext', 'Peter', '3']);
+  const weekdayLines = lines(weekdayMenuReply[3]);
+  check('weekday menu: line 1 (right after the prefixed question) is "0 - Abbrechen"', weekdayLines[1] === '0 - Abbrechen');
+  check('weekday menu: line 2 is option 1 (Montag)', weekdayLines[2] === '1 - Montag');
+
   const cancelledWeekday = await converse('menucancel3@s.whatsapp.net', ['1', 'Testtext', 'Peter', '3', '0']);
-  check('choosing 0 at the weekday menu cancels', cancelledWeekday[4] === 'Vorgang abgebrochen.');
+  check('choosing 0 at the weekday menu cancels', cancelledWeekday[4].startsWith('Vorgang abgebrochen.'));
+  check('choosing 0 at the weekday menu also shows the main menu again', cancelledWeekday[4].includes('Was moechtest du tun'));
 
   // monthly mode menu
+  const monthlyModeReply = await converse('monthlymodecheck@s.whatsapp.net', ['1', 'Testtext', 'Peter', '4']);
+  const monthlyModeLines = lines(monthlyModeReply[3]);
+  check('monthly mode menu: line 1 is "0 - Abbrechen"', monthlyModeLines[1] === '0 - Abbrechen');
+
   const cancelledMonthly = await converse('menucancel4@s.whatsapp.net', ['1', 'Testtext', 'Peter', '4', '0']);
-  check('choosing 0 at the monthly mode menu cancels', cancelledMonthly[4] === 'Vorgang abgebrochen.');
+  check('choosing 0 at the monthly mode menu cancels', cancelledMonthly[4].startsWith('Vorgang abgebrochen.'));
+  check('choosing 0 at the monthly mode menu also shows the main menu again', cancelledMonthly[4].includes('Was moechtest du tun'));
 
   // monthly weekday -> occurrence menu
+  const occurrenceReply = await converse('occurrencecheck@s.whatsapp.net', ['1', 'Testtext', 'Peter', '4', '2', '1']);
+  const occurrenceLines = lines(occurrenceReply[5]);
+  check('occurrence menu: line 1 is "0 - Abbrechen"', occurrenceLines[1] === '0 - Abbrechen');
+
   const cancelledOccurrence = await converse('menucancel5@s.whatsapp.net', ['1', 'Testtext', 'Peter', '4', '2', '1', '0']);
-  check('choosing 0 at the occurrence menu cancels', cancelledOccurrence[6] === 'Vorgang abgebrochen.');
+  check('choosing 0 at the occurrence menu cancels', cancelledOccurrence[6].startsWith('Vorgang abgebrochen.'));
+  check('choosing 0 at the occurrence menu also shows the main menu again', cancelledOccurrence[6].includes('Was moechtest du tun'));
+
+  // typing "abbrechen" behaves identically to choosing "0" (same shared helper)
+  const cancelledByWord = await converse('menucancel7@s.whatsapp.net', ['1', 'Testtext', 'Peter', 'abbrechen']);
+  check('typing "abbrechen" also shows the main menu again, same as "0"', cancelledByWord[3].includes('Was moechtest du tun'));
 
   // 0 is still a legitimate free-text answer where it isn't a menu (e.g. 0 days lead time for a range)
   const rangeWithZeroLead = await converse(

@@ -6,8 +6,11 @@
  *                    people know how to start; the actual step-by-step
  *                    creation still happens in a private chat with the
  *                    bot, to keep the group feed clean.
- *   /löschen       - numbered list of active reminders -> reply with a
- *                    number to cancel it (anyone can cancel anything)
+ *   /löschen       - numbered list of active reminders (with "0 -
+ *                    Abbrechen" first, same as every other menu) -> reply
+ *                    with a number to cancel it (anyone can cancel
+ *                    anything), or "0" to back out without cancelling
+ *                    anything
  *   /liste         - shows all active reminders for the group
  *   /liste <name>  - shows all active reminders assigned to that person
  *                    (plus "alle" ones, since those apply to everyone)
@@ -108,6 +111,9 @@ function listForPerson(name) {
   return [`Erinnerungen fuer ${name}:`, ...reminders.map(formatReminderLine)].join('\n');
 }
 
+// Same template as the DM wizard's menus: the question, then "0 -
+// Abbrechen" right below it, then the actual choices (here: the
+// reminders themselves, standing in for numbered options).
 function startCancelFlow(chatId) {
   const reminders = listActiveReminders();
   if (reminders.length === 0) {
@@ -118,6 +124,7 @@ function startCancelFlow(chatId) {
 
   const lines = [
     'Welche Erinnerung soll storniert werden?',
+    '0 - Abbrechen',
     ...reminders.map(formatReminderLine),
     '',
     'Antworte mit der Nummer (z.B. "3").',
@@ -128,7 +135,7 @@ function startCancelFlow(chatId) {
 function handleSelection(chatId, selection) {
   const state = getState(chatId);
 
-  // No active /cancel flow in this group - a bare number is just normal
+  // No active /löschen flow in this group - a bare number is just normal
   // chat (e.g. someone typing a phone number, a count, a date). Say nothing.
   if (!state || state.step !== 'awaiting_cancel_number') {
     return null;
@@ -137,6 +144,11 @@ function handleSelection(chatId, selection) {
   if (minutesSince(state.updatedAt) > CANCEL_LIST_TTL_MINUTES) {
     clearState(chatId);
     return null; // list is stale; treat this as unrelated chat rather than guessing
+  }
+
+  if (selection === 0) {
+    clearState(chatId);
+    return 'Vorgang abgebrochen.';
   }
 
   if (!state.data.ids.includes(selection)) {

@@ -246,6 +246,27 @@ function makeReminder(messageText, assignee = 'alle') {
   handleGroupMessage(GROUP_ID, String(current.id));
 }
 
+// --- unified menu template: /löschen's list leads with "0 - Abbrechen" too ---
+{
+  const r11 = makeReminder('Loeschen Template Test', 'alle');
+  const listReply = handleGroupMessage(GROUP_ID, '/löschen');
+  const lines = listReply.split('\n');
+  check('/löschen list: line 0 is the question', lines[0].includes('Welche Erinnerung soll storniert werden'));
+  check('/löschen list: line 1 is "0 - Abbrechen"', lines[1] === '0 - Abbrechen');
+
+  const cancelledViaZero = handleGroupMessage(GROUP_ID, '0');
+  check('choosing 0 in the /löschen list cancels the flow (not a reminder)', cancelledViaZero === 'Vorgang abgebrochen.');
+  check('the reminder itself is untouched after choosing 0', listActiveReminders().some((r) => r.id === r11.id));
+
+  // the flow is over after choosing 0, so a stray number afterwards is ordinary chat again
+  const strayNumber = handleGroupMessage(GROUP_ID, String(r11.id));
+  check('after choosing 0, a later bare number is ignored (no active flow anymore)', strayNumber === null);
+
+  handleGroupMessage(GROUP_ID, '/löschen');
+  const finalCancel = handleGroupMessage(GROUP_ID, String(r11.id));
+  check('the reminder can still be cancelled normally afterwards', finalCancel.includes('storniert'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 db.close();
 process.exitCode = fail > 0 ? 1 : 0;

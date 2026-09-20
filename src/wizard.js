@@ -28,8 +28,16 @@ import { GROUP_CHAT_ID, DEFAULT_FIRE_TIME, DEBUG_ASK_GROUP_FIRE_TIME } from './c
 
 const WEEKDAY_NAMES_DE = ['', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
 
+// Every menu below follows the same template: the question, then "0 -
+// Abbrechen" immediately below it, then the actual choices. "0" always
+// means the same thing everywhere - cancel whatever's in progress and
+// reset back to the main menu - so a person never has to remember whether
+// it's available or where it sits in the list.
+const CANCEL_OPTION_LINE = '0 - Abbrechen';
+
 export const MAIN_MENU = [
   'Hallo! Was moechtest du tun?',
+  CANCEL_OPTION_LINE,
   '1 - Neue Erinnerung fuer die Gruppe anlegen',
   '2 - Neue persoenliche Erinnerung anlegen (nur fuer dich, privat)',
   '3 - Alle Erinnerungen fuer die Gruppe anzeigen',
@@ -40,20 +48,22 @@ export const MAIN_MENU = [
   'Antworte einfach mit der Zahl.',
 ].join('\n');
 
-const CANCEL_OPTION_LINE = '0 - Abbrechen';
-
 const RECURRENCE_MENU = [
   'Wie oft soll die Erinnerung gelten?',
+  CANCEL_OPTION_LINE,
   '1 - Einmalig (an einem bestimmten Datum)',
   '2 - Zeitraum (z.B. "Kita geschlossen von... bis...")',
   '3 - Jede Woche',
   '4 - Jeden Monat',
   '5 - Countdown zu einem Datum (z.B. Geburtstag)',
   '6 - Jeden Tag',
-  CANCEL_OPTION_LINE,
 ].join('\n');
 
+// No question line baked in here - callers prefix their own (e.g. "An
+// welchem Wochentag?") before this. "0" still comes first, right after
+// that prefixed question, matching every other menu's template.
 const WEEKDAY_MENU = [
+  CANCEL_OPTION_LINE,
   '1 - Montag',
   '2 - Dienstag',
   '3 - Mittwoch',
@@ -61,24 +71,23 @@ const WEEKDAY_MENU = [
   '5 - Freitag',
   '6 - Samstag',
   '7 - Sonntag',
-  CANCEL_OPTION_LINE,
 ].join('\n');
 
 const MONTHLY_MODE_MENU = [
   'Wie soll der monatliche Termin festgelegt werden?',
+  CANCEL_OPTION_LINE,
   '1 - Nach Datum (z.B. immer am 3. des Monats)',
   '2 - Nach Wochentag (z.B. immer der 3. Montag im Monat)',
-  CANCEL_OPTION_LINE,
 ].join('\n');
 
 const OCCURRENCE_MENU = [
   'Der wievielte Wochentag im Monat?',
+  CANCEL_OPTION_LINE,
   '1 - 1.',
   '2 - 2.',
   '3 - 3.',
   '4 - 4.',
   '5 - Letzter',
-  CANCEL_OPTION_LINE,
 ].join('\n');
 
 const CANCEL_WORDS = ['abbrechen', 'stop', 'abort'];
@@ -185,6 +194,17 @@ function listForPerson(name) {
   return [`Erinnerungen fuer ${name}:`, ...reminders.map(formatReminderLine)].join('\n');
 }
 
+/**
+ * Shared cancellation behavior: clears whatever's in progress AND shows
+ * the main menu again in the same reply, so the person can immediately
+ * start something else instead of being left to guess what to type next.
+ * Used both by the global "abbrechen" text command and by choosing "0" in
+ * any numbered menu - both mean exactly the same thing.
+ */
+function cancelAndShowMainMenu() {
+  return `Vorgang abgebrochen.\n\n${MAIN_MENU}`;
+}
+
 // ---- main entry point -------------------------------------------------
 
 /**
@@ -204,7 +224,7 @@ export async function handleWizardMessage(senderId, rawText) {
   // Global cancel, works at any step.
   if (state && CANCEL_WORDS.includes(text.toLowerCase())) {
     clearState(senderId);
-    return 'Vorgang abgebrochen.';
+    return cancelAndShowMainMenu();
   }
 
   const reply = !state ? handleMenuInput(senderId, text) : handleStepInput(senderId, state, text);
@@ -242,14 +262,14 @@ function handleMenuInput(senderId, text) {
 
 /**
  * Menu-driven steps (numbered choices) show a visible "0 - Abbrechen"
- * option. This checks for it and, if chosen, resets the conversation.
- * Returns the cancellation reply, or null if "0" wasn't chosen (so the
- * caller should continue handling the input normally).
+ * option, always first. This checks for it and, if chosen, cancels and
+ * shows the main menu again. Returns that reply, or null if "0" wasn't
+ * chosen (so the caller should continue handling the input normally).
  */
 function checkMenuCancel(senderId, text) {
   if (text.trim() === '0') {
     clearState(senderId);
-    return 'Vorgang abgebrochen.';
+    return cancelAndShowMainMenu();
   }
   return null;
 }
@@ -280,7 +300,7 @@ function handleStepInput(senderId, state, text) {
       const cancelled = checkMenuCancel(senderId, text);
       if (cancelled) return cancelled;
       const choice = parseMenuNumber(text, 1, 6);
-      if (!choice) return `Bitte antworte mit einer Zahl von 1-6.\n\n${RECURRENCE_MENU}`;
+      if (!choice) return `Bitte antworte mit 0 zum Abbrechen oder einer Zahl von 1-6.\n\n${RECURRENCE_MENU}`;
       if (choice === 1) {
         setState(senderId, 'awaiting_once_date', data);
         return 'An welchem Datum? Format TT.MM.JJJJ (z.B. 24.12.2026)';
@@ -340,7 +360,7 @@ function handleStepInput(senderId, state, text) {
       const cancelled = checkMenuCancel(senderId, text);
       if (cancelled) return cancelled;
       const weekday = parseMenuNumber(text, 1, 7);
-      if (!weekday) return `Bitte antworte mit einer Zahl von 1-7.\n${WEEKDAY_MENU}`;
+      if (!weekday) return `Bitte antworte mit 0 zum Abbrechen oder einer Zahl von 1-7.\n${WEEKDAY_MENU}`;
       const newData = { ...data, recurrenceType: 'weekly', weekday };
       return proceedAfterRecurrenceDetails(senderId, newData);
     }
@@ -349,7 +369,7 @@ function handleStepInput(senderId, state, text) {
       const cancelled = checkMenuCancel(senderId, text);
       if (cancelled) return cancelled;
       const choice = parseMenuNumber(text, 1, 2);
-      if (!choice) return `Bitte antworte mit 1 oder 2.\n\n${MONTHLY_MODE_MENU}`;
+      if (!choice) return `Bitte antworte mit 0 zum Abbrechen oder mit 1 oder 2.\n\n${MONTHLY_MODE_MENU}`;
       if (choice === 1) {
         setState(senderId, 'awaiting_monthly_date_day', data);
         return 'Am wievielten Tag des Monats? (Zahl von 1-31)';
@@ -369,7 +389,7 @@ function handleStepInput(senderId, state, text) {
       const cancelled = checkMenuCancel(senderId, text);
       if (cancelled) return cancelled;
       const weekday = parseMenuNumber(text, 1, 7);
-      if (!weekday) return `Bitte antworte mit einer Zahl von 1-7.\n${WEEKDAY_MENU}`;
+      if (!weekday) return `Bitte antworte mit 0 zum Abbrechen oder einer Zahl von 1-7.\n${WEEKDAY_MENU}`;
       setState(senderId, 'awaiting_monthly_weekday_occurrence', { ...data, weekday });
       return OCCURRENCE_MENU;
     }
@@ -378,7 +398,7 @@ function handleStepInput(senderId, state, text) {
       const cancelled = checkMenuCancel(senderId, text);
       if (cancelled) return cancelled;
       const choice = parseMenuNumber(text, 1, 5);
-      if (!choice) return `Bitte antworte mit einer Zahl von 1-5.\n\n${OCCURRENCE_MENU}`;
+      if (!choice) return `Bitte antworte mit 0 zum Abbrechen oder einer Zahl von 1-5.\n\n${OCCURRENCE_MENU}`;
       const occurrence = choice === 5 ? -1 : choice;
       const newData = { ...data, recurrenceType: 'monthly_weekday', occurrence };
       return proceedAfterRecurrenceDetails(senderId, newData);

@@ -167,6 +167,31 @@ Getestet mit `npm run test:reminders` (20/20), `npm run test:wizard`
 Tests, die eine kuenstlich "abgelaufene" Erinnerung anlegen und pruefen,
 dass sie in keiner Liste mehr auftaucht.
 
+**Meilenstein 11 (fertig) - Einheitliches Menue-Template ueberall:**
+Jedes Menue (Hauptmenue, Wiederholungsart, Wochentag, monatlicher Modus,
+"der wievielte", und die `/löschen`-Liste in der Gruppe) folgt jetzt genau
+dem gleichen Aufbau: zuerst die Frage, direkt danach `0 - Abbrechen`, dann
+erst die eigentlichen Auswahlmoeglichkeiten. "0" bedeutet ueberall exakt
+dasselbe, an keiner Stelle muss man sich merken, ob oder wo es verfuegbar
+ist.
+- **"0" bricht jetzt IMMER ab UND zeigt sofort wieder das Hauptmenue** (statt
+  nur "Vorgang abgebrochen." stehen zu lassen und darauf zu warten, dass
+  jemand selbst weiss, was als naechstes zu tippen ist). Das gilt auch fuer
+  das Tippen von "abbrechen" als Text - beides nutzt jetzt denselben Weg
+  und verhaelt sich identisch.
+- **Die `/löschen`-Liste in der Gruppe hat jetzt ebenfalls `0 - Abbrechen`**
+  als erste Zeile: Man kann den Storno-Vorgang jetzt abbrechen, ohne 5
+  Minuten auf den automatischen Ablauf warten zu muessen oder aus Versehen
+  eine falsche Nummer zu waehlen.
+- Die Hinweistexte bei einer ungueltigen Eingabe in einem Menue erwaehnen
+  "0" jetzt explizit (z.B. "Bitte antworte mit 0 zum Abbrechen oder einer
+  Zahl von 1-6.").
+
+Getestet mit `npm run test:wizard` (82/82, inkl. Tests, die pruefen, dass
+"0 - Abbrechen" in jedem Menue exakt die zweite Zeile ist - direkt nach der
+Frage, vor den Auswahlmoeglichkeiten) und `npm run test:group-commands`
+(49/49, inkl. neuer Tests fuer "0" in der `/löschen`-Liste).
+
 ## Wichtiger Hinweis zur Node.js-Version
 
 Dieses Projekt braucht **Node.js 22** (in `.nvmrc` und `package.json`
@@ -228,7 +253,7 @@ natives Modul neu gegen Node 22 baut.)
    npm run test:scheduler        # Taeglicher Scheduler, inkl. @Erwaehnungen & Fehler-Haertung
    npm run test:contacts         # Name -> WhatsApp-ID Zuordnung
    ```
-   Aktueller Stand: 185 Tests insgesamt, alle sollten "passed" zeigen.
+   Aktueller Stand: 206 Tests insgesamt, alle sollten "passed" zeigen.
 
 4. Verbindungstest starten:
    ```
