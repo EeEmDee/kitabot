@@ -1,0 +1,30 @@
+{
+  "name": "kita-bot",
+  "version": "0.1.0",
+  "description": "WhatsApp Erinnerungs-Bot fuer die Kita-Gruppe",
+  "engines": {
+    "node": "22.x"
+  },
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "connect-test": "node src/connect-test.js",
+    "test:reminders": "node src/test-reminders.js",
+    "test:wizard": "node src/test-wizard.js",
+    "test:wizard-timeout": "node src/test-wizard-timeout.js",
+    "test:group-commands": "node src/test-group-commands.js",
+    "test:scheduler": "node src/test-scheduler.js",
+    "test:contacts": "node src/test-contacts.js",
+    "start": "node src/bot.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.21.0",
+    "ejs": "^3.1.10",
+    "node-cron": "^3.0.3",
+    "pino": "^9.4.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
