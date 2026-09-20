@@ -179,6 +179,8 @@ ist.
   jemand selbst weiss, was als naechstes zu tippen ist). Das gilt auch fuer
   das Tippen von "abbrechen" als Text - beides nutzt jetzt denselben Weg
   und verhaelt sich identisch.
+  **Hinweis:** Dieses Verhalten (Hauptmenue nach "0" erneut anzeigen) wurde
+  in Meilenstein 12 wieder geaendert - siehe dort fuer den aktuellen Stand.
 - **Die `/löschen`-Liste in der Gruppe hat jetzt ebenfalls `0 - Abbrechen`**
   als erste Zeile: Man kann den Storno-Vorgang jetzt abbrechen, ohne 5
   Minuten auf den automatischen Ablauf warten zu muessen oder aus Versehen
@@ -191,6 +193,35 @@ Getestet mit `npm run test:wizard` (82/82, inkl. Tests, die pruefen, dass
 "0 - Abbrechen" in jedem Menue exakt die zweite Zeile ist - direkt nach der
 Frage, vor den Auswahlmoeglichkeiten) und `npm run test:group-commands`
 (49/49, inkl. neuer Tests fuer "0" in der `/löschen`-Liste).
+
+**Meilenstein 12 (fertig) - "0" wirklich ueberall, und Abbrechen beendet
+sauber (statt Hauptmenue erneut zu zeigen):**
+Nach echtem Nutzungstest von Meilenstein 11 kamen drei Korrekturen:
+- **"0" funktioniert jetzt auch im Hauptmenue selbst** ("Was moechtest du
+  tun?"). Vorher stand `0 - Abbrechen` dort zwar schon in der Menue-Liste,
+  hatte aber keine Wirkung, wenn man es tatsaechlich eingegeben hat - das
+  war ein Fehler und ist jetzt behoben.
+- **"0" funktioniert jetzt auch bei freien Texteingaben**, nicht nur in
+  nummerierten Menues - z.B. beim Eintippen des Erinnerungstexts, des
+  Namens fuer "Fuer wen?", eines Datums oder einer Uhrzeit. Der Hinweistext
+  unter jeder solchen Frage zeigt das jetzt auch an: "(Antworte mit \"0\"
+  oder \"abbrechen\", um den Vorgang zu stoppen.)".
+  Ausnahme, bewusst: bei der Frage nach der Vorlaufzeit in Tagen (Zeitraum-
+  und Countdown-Erinnerungen) ist "0" selbst eine gueltige Antwort (z.B.
+  "0 Tage Vorlauf" bzw. "am Tag selbst ankuendigen"). Dort bricht nur das
+  Wort "abbrechen" (bzw. "stop"/"abort") ab, und der Hinweistext zeigt dort
+  konsequenterweise auch nur "abbrechen" an, nicht "0".
+- **Abbrechen zeigt jetzt NICHT mehr automatisch das Hauptmenue an** - das
+  war die Aenderung aus Meilenstein 11, hat sich in der Praxis aber nicht
+  richtig angefuehlt. Jetzt gilt wieder: "0" oder "abbrechen" beendet den
+  laufenden Vorgang komplett und antwortet nur noch mit "Vorgang
+  abgebrochen." - ohne im gleichen Zug ein neues Menue hinterherzuschicken.
+  Wer danach etwas Neues machen moechte, schreibt einfach wieder eine
+  normale Nachricht an den Bot.
+
+Getestet mit `npm run test:wizard` (82/82, u.a. neue Tests fuer "0" im
+Hauptmenue, "0" als Erinnerungstext, und dass nach dem Abbrechen exakt nur
+"Vorgang abgebrochen." zurueckkommt statt zusaetzlich das Hauptmenue).
 
 ## Wichtiger Hinweis zur Node.js-Version
 

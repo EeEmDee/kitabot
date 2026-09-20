@@ -103,8 +103,7 @@ console.log(`Running wizard tests against today = ${today}\n`);
     'abbrechen',
   ]);
   check('past date rejected with clear message', replies[4].includes('Vergangenheit'));
-  check('abbrechen cancels the flow', replies.at(-1).startsWith('Vorgang abgebrochen.'));
-  check('abbrechen also shows the main menu again in the same reply', replies.at(-1).includes('Was moechtest du tun'));
+  check('abbrechen cancels the flow and exits (no menu re-shown)', replies.at(-1) === 'Vorgang abgebrochen.');
 }
 
 // --- range (closure) reminder ---
@@ -360,18 +359,33 @@ console.log(`Running wizard tests against today = ${today}\n`);
 }
 
 // --- unified menu template: every menu leads with "0 - Abbrechen", right
-// after the question, before the numbered choices - and cancelling always
-// clears state AND shows the main menu again in the same reply. ---
+// after the question, before the numbered choices - and choosing "0" (or
+// typing "abbrechen") always just cancels and exits, with a plain
+// confirmation - no menu re-shown, at ANY step (including the main menu
+// and free-text prompts like typing the reminder's own text), except the
+// couple of steps where a bare "0" is itself a legitimate answer. ---
 {
-  // Helper: every menu's lines, with any leading "" (blank prompt lines
-  // some replies carry) stripped, so we can check exact line positions.
   const lines = (text) => text.split('\n');
 
-  const mainMenuReply = await converse('templatecheck0@s.whatsapp.net', ['irgendwas-unbekanntes']);
-  const mainLines = lines(mainMenuReply[0]);
+  // "0" works at the main menu itself, even though nothing is really "in
+  // progress" there yet - it still gives a clear confirmation.
+  const mainMenuFirst = await converse('templatecheck0@s.whatsapp.net', ['irgendwas-unbekanntes']);
+  const mainLines = lines(mainMenuFirst[0]);
   check('main menu: line 0 is the question', mainLines[0].includes('Was moechtest du tun'));
   check('main menu: line 1 is "0 - Abbrechen"', mainLines[1] === '0 - Abbrechen');
   check('main menu: line 2 is option 1', mainLines[2].startsWith('1 -'));
+
+  const zeroAtMainMenu = await converse('zeroatmainmenu@s.whatsapp.net', ['0']);
+  check('choosing 0 at the main menu itself gives a clear confirmation', zeroAtMainMenu[0] === 'Vorgang abgebrochen.');
+
+  // "0" works while typing the reminder's own text (a free-text prompt,
+  // not a numbered menu).
+  const zeroAsEventName = await converse('zeroaseventname@s.whatsapp.net', ['1', '0']);
+  check('typing "0" instead of the reminder text cancels (exits, no menu)', zeroAsEventName[1] === 'Vorgang abgebrochen.');
+  check(
+    'the message-text prompt hint mentions "0" as an alternative to "abbrechen"',
+    zeroAsEventName[0].includes('(Antworte mit "0" oder "abbrechen"')
+  );
 
   const menus = await converse('menucancel@s.whatsapp.net', ['1', 'Testtext', 'Peter']);
   const recurrenceLines = lines(menus[2]);
@@ -380,10 +394,9 @@ console.log(`Running wizard tests against today = ${today}\n`);
   check('recurrence menu: line 2 is option 1', recurrenceLines[2].startsWith('1 -'));
 
   const cancelled = await converse('menucancel2@s.whatsapp.net', ['1', 'Testtext', 'Peter', '0']);
-  check('choosing 0 at the recurrence menu cancels', cancelled[3].startsWith('Vorgang abgebrochen.'));
-  check('choosing 0 also shows the main menu again in the same reply', cancelled[3].includes('Was moechtest du tun'));
-  const afterCancel = await converse('menucancel2@s.whatsapp.net', ['irgendwas']);
-  check('after cancelling via 0, state is reset to the main menu', afterCancel[0].includes('Was moechtest du tun'));
+  check('choosing 0 at the recurrence menu cancels and exits (no menu re-shown)', cancelled[3] === 'Vorgang abgebrochen.');
+  const afterCancel = await converse('menucancel2@s.whatsapp.net', ['1']);
+  check('after cancelling via 0, a fresh message starts a new flow normally', afterCancel[0].includes('Was soll die Erinnerung beinhalten'));
 
   // weekday menu (weekly recurrence) - no question line of its own, the
   // caller prefixes one, but "0" must still be the very next line after it.
@@ -393,8 +406,7 @@ console.log(`Running wizard tests against today = ${today}\n`);
   check('weekday menu: line 2 is option 1 (Montag)', weekdayLines[2] === '1 - Montag');
 
   const cancelledWeekday = await converse('menucancel3@s.whatsapp.net', ['1', 'Testtext', 'Peter', '3', '0']);
-  check('choosing 0 at the weekday menu cancels', cancelledWeekday[4].startsWith('Vorgang abgebrochen.'));
-  check('choosing 0 at the weekday menu also shows the main menu again', cancelledWeekday[4].includes('Was moechtest du tun'));
+  check('choosing 0 at the weekday menu cancels and exits', cancelledWeekday[4] === 'Vorgang abgebrochen.');
 
   // monthly mode menu
   const monthlyModeReply = await converse('monthlymodecheck@s.whatsapp.net', ['1', 'Testtext', 'Peter', '4']);
@@ -402,8 +414,7 @@ console.log(`Running wizard tests against today = ${today}\n`);
   check('monthly mode menu: line 1 is "0 - Abbrechen"', monthlyModeLines[1] === '0 - Abbrechen');
 
   const cancelledMonthly = await converse('menucancel4@s.whatsapp.net', ['1', 'Testtext', 'Peter', '4', '0']);
-  check('choosing 0 at the monthly mode menu cancels', cancelledMonthly[4].startsWith('Vorgang abgebrochen.'));
-  check('choosing 0 at the monthly mode menu also shows the main menu again', cancelledMonthly[4].includes('Was moechtest du tun'));
+  check('choosing 0 at the monthly mode menu cancels and exits', cancelledMonthly[4] === 'Vorgang abgebrochen.');
 
   // monthly weekday -> occurrence menu
   const occurrenceReply = await converse('occurrencecheck@s.whatsapp.net', ['1', 'Testtext', 'Peter', '4', '2', '1']);
@@ -411,21 +422,35 @@ console.log(`Running wizard tests against today = ${today}\n`);
   check('occurrence menu: line 1 is "0 - Abbrechen"', occurrenceLines[1] === '0 - Abbrechen');
 
   const cancelledOccurrence = await converse('menucancel5@s.whatsapp.net', ['1', 'Testtext', 'Peter', '4', '2', '1', '0']);
-  check('choosing 0 at the occurrence menu cancels', cancelledOccurrence[6].startsWith('Vorgang abgebrochen.'));
-  check('choosing 0 at the occurrence menu also shows the main menu again', cancelledOccurrence[6].includes('Was moechtest du tun'));
+  check('choosing 0 at the occurrence menu cancels and exits', cancelledOccurrence[6] === 'Vorgang abgebrochen.');
 
-  // typing "abbrechen" behaves identically to choosing "0" (same shared helper)
+  // typing "abbrechen" behaves identically to choosing "0"
   const cancelledByWord = await converse('menucancel7@s.whatsapp.net', ['1', 'Testtext', 'Peter', 'abbrechen']);
-  check('typing "abbrechen" also shows the main menu again, same as "0"', cancelledByWord[3].includes('Was moechtest du tun'));
+  check('typing "abbrechen" cancels and exits, same as "0"', cancelledByWord[3] === 'Vorgang abgebrochen.');
 
-  // 0 is still a legitimate free-text answer where it isn't a menu (e.g. 0 days lead time for a range)
+  // 0 is still a legitimate free-text answer where the question is about a
+  // number that can genuinely be zero (lead days) - both for a range...
   const rangeWithZeroLead = await converse(
     'menucancel6@s.whatsapp.net',
     ['1', 'Testtext', 'Peter', '2', '24.12.2026', '31.12.2026', '0']
   );
   check(
-    '"0" is NOT treated as cancel outside a numbered menu (range lead days)',
+    '"0" is NOT treated as cancel for a range\'s lead-days answer',
     rangeWithZeroLead[6].includes('Bitte pruefen') && !rangeWithZeroLead[6].includes('abgebrochen')
+  );
+  check(
+    'the lead-days prompt hint only mentions "abbrechen", not "0" (since 0 is a real answer there)',
+    !rangeWithZeroLead[5].includes('"0"') && rangeWithZeroLead[5].includes('"abbrechen"')
+  );
+
+  // ...and for a countdown's lead-days list (a single "0" = announce on the day itself).
+  const countdownWithZeroLead = await converse(
+    'menucancel8@s.whatsapp.net',
+    ['1', 'Testtext', 'Peter', '5', '24.12.2026', '0']
+  );
+  check(
+    '"0" is NOT treated as cancel for a countdown\'s lead-days-list answer',
+    countdownWithZeroLead[5].includes('Bitte pruefen') && !countdownWithZeroLead[5].includes('abgebrochen')
   );
 }
 

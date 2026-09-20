@@ -30,9 +30,9 @@ const WEEKDAY_NAMES_DE = ['', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'F
 
 // Every menu below follows the same template: the question, then "0 -
 // Abbrechen" immediately below it, then the actual choices. "0" always
-// means the same thing everywhere - cancel whatever's in progress and
-// reset back to the main menu - so a person never has to remember whether
-// it's available or where it sits in the list.
+// means the same thing everywhere (see isCancelTrigger below) - cancel
+// whatever's in progress and stop - so a person never has to remember
+// whether it's available or where it sits in the list.
 const CANCEL_OPTION_LINE = '0 - Abbrechen';
 
 export const MAIN_MENU = [
@@ -195,14 +195,25 @@ function listForPerson(name) {
 }
 
 /**
- * Shared cancellation behavior: clears whatever's in progress AND shows
- * the main menu again in the same reply, so the person can immediately
- * start something else instead of being left to guess what to type next.
- * Used both by the global "abbrechen" text command and by choosing "0" in
- * any numbered menu - both mean exactly the same thing.
+ * Steps where a bare "0" is a legitimate answer to the actual question
+ * (not a request to cancel) - e.g. "0 Tage vorher" for a range's lead
+ * time, or "0" as a single-value countdown lead-days list (announce on
+ * the day itself). Everywhere else, "0" is treated exactly like typing
+ * "abbrechen".
  */
-function cancelAndShowMainMenu() {
-  return `Vorgang abgebrochen.\n\n${MAIN_MENU}`;
+const ZERO_IS_VALID_INPUT_STEPS = new Set(['awaiting_range_lead', 'awaiting_countdown_leaddays']);
+
+function isCancelTrigger(text, state) {
+  const normalized = text.trim().toLowerCase();
+  if (CANCEL_WORDS.includes(normalized)) return true;
+  if (text.trim() === '0' && !(state && ZERO_IS_VALID_INPUT_STEPS.has(state.step))) return true;
+  return false;
+}
+
+function cancelHintFor(step) {
+  return ZERO_IS_VALID_INPUT_STEPS.has(step)
+    ? '(Antworte mit "abbrechen", um den Vorgang zu stoppen.)'
+    : '(Antworte mit "0" oder "abbrechen", um den Vorgang zu stoppen.)';
 }
 
 // ---- main entry point -------------------------------------------------
@@ -211,26 +222,33 @@ function cancelAndShowMainMenu() {
  * Processes one incoming private-chat message and returns the reply text.
  * Persists conversation state as a side effect.
  *
+ * "0" and "abbrechen" both cancel whatever's in progress - at any step,
+ * including the main menu itself (where there's nothing really "in
+ * progress", but the person still gets a clear confirmation instead of
+ * silently nothing happening) and every free-text prompt (e.g. typing the
+ * reminder's text), not just numbered menus. Cancelling fully exits the
+ * interaction: it just confirms and stops there - it does NOT re-show any
+ * menu, so the person has to send a new message to start again.
+ *
  * Any reply that leaves the person mid-flow (i.e. we're still waiting on
- * more input from them) gets a visible reminder that they can type
- * "abbrechen" to stop - rather than that only working silently. Finished
- * flows (a completed reminder, a listing, a rejected confirmation) don't
- * get the hint, since there's nothing left to cancel.
+ * more input from them) gets a visible reminder of how to cancel -
+ * rather than that only working silently. Finished flows (a completed
+ * reminder, a listing, a cancellation) don't get the hint, since there's
+ * nothing left to cancel.
  */
 export async function handleWizardMessage(senderId, rawText) {
   const text = (rawText || '').trim();
   const state = getState(senderId);
 
-  // Global cancel, works at any step.
-  if (state && CANCEL_WORDS.includes(text.toLowerCase())) {
+  if (isCancelTrigger(text, state)) {
     clearState(senderId);
-    return cancelAndShowMainMenu();
+    return 'Vorgang abgebrochen.';
   }
 
   const reply = !state ? handleMenuInput(senderId, text) : handleStepInput(senderId, state, text);
 
-  const stillInProgress = getState(senderId) !== null;
-  return stillInProgress ? `${reply}\n\n(Antworte mit "abbrechen", um den Vorgang zu stoppen.)` : reply;
+  const newState = getState(senderId);
+  return newState !== null ? `${reply}\n\n${cancelHintFor(newState.step)}` : reply;
 }
 
 function handleMenuInput(senderId, text) {
@@ -260,20 +278,6 @@ function handleMenuInput(senderId, text) {
   return MAIN_MENU;
 }
 
-/**
- * Menu-driven steps (numbered choices) show a visible "0 - Abbrechen"
- * option, always first. This checks for it and, if chosen, cancels and
- * shows the main menu again. Returns that reply, or null if "0" wasn't
- * chosen (so the caller should continue handling the input normally).
- */
-function checkMenuCancel(senderId, text) {
-  if (text.trim() === '0') {
-    clearState(senderId);
-    return cancelAndShowMainMenu();
-  }
-  return null;
-}
-
 function handleStepInput(senderId, state, text) {
   const { step, data } = state;
 
@@ -297,8 +301,6 @@ function handleStepInput(senderId, state, text) {
     }
 
     case 'awaiting_recurrence_type': {
-      const cancelled = checkMenuCancel(senderId, text);
-      if (cancelled) return cancelled;
       const choice = parseMenuNumber(text, 1, 6);
       if (!choice) return `Bitte antworte mit 0 zum Abbrechen oder einer Zahl von 1-6.\n\n${RECURRENCE_MENU}`;
       if (choice === 1) {
@@ -357,8 +359,6 @@ function handleStepInput(senderId, state, text) {
     }
 
     case 'awaiting_weekly_day': {
-      const cancelled = checkMenuCancel(senderId, text);
-      if (cancelled) return cancelled;
       const weekday = parseMenuNumber(text, 1, 7);
       if (!weekday) return `Bitte antworte mit 0 zum Abbrechen oder einer Zahl von 1-7.\n${WEEKDAY_MENU}`;
       const newData = { ...data, recurrenceType: 'weekly', weekday };
@@ -366,8 +366,6 @@ function handleStepInput(senderId, state, text) {
     }
 
     case 'awaiting_monthly_mode': {
-      const cancelled = checkMenuCancel(senderId, text);
-      if (cancelled) return cancelled;
       const choice = parseMenuNumber(text, 1, 2);
       if (!choice) return `Bitte antworte mit 0 zum Abbrechen oder mit 1 oder 2.\n\n${MONTHLY_MODE_MENU}`;
       if (choice === 1) {
@@ -386,8 +384,6 @@ function handleStepInput(senderId, state, text) {
     }
 
     case 'awaiting_monthly_weekday_day': {
-      const cancelled = checkMenuCancel(senderId, text);
-      if (cancelled) return cancelled;
       const weekday = parseMenuNumber(text, 1, 7);
       if (!weekday) return `Bitte antworte mit 0 zum Abbrechen oder einer Zahl von 1-7.\n${WEEKDAY_MENU}`;
       setState(senderId, 'awaiting_monthly_weekday_occurrence', { ...data, weekday });
@@ -395,8 +391,6 @@ function handleStepInput(senderId, state, text) {
     }
 
     case 'awaiting_monthly_weekday_occurrence': {
-      const cancelled = checkMenuCancel(senderId, text);
-      if (cancelled) return cancelled;
       const choice = parseMenuNumber(text, 1, 5);
       if (!choice) return `Bitte antworte mit 0 zum Abbrechen oder einer Zahl von 1-5.\n\n${OCCURRENCE_MENU}`;
       const occurrence = choice === 5 ? -1 : choice;
