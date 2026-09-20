@@ -223,6 +223,25 @@ Getestet mit `npm run test:wizard` (82/82, u.a. neue Tests fuer "0" im
 Hauptmenue, "0" als Erinnerungstext, und dass nach dem Abbrechen exakt nur
 "Vorgang abgebrochen." zurueckkommt statt zusaetzlich das Hauptmenue).
 
+**Meilenstein 13 (fertig) - Als systemd-Dienst einrichten (dauerhafter
+Betrieb):**
+- Neue Datei `kita-bot.service` (Vorlage fuer systemd) im Projekt-
+  Hauptordner.
+- Startet den Bot automatisch beim Hochfahren des Pi und startet ihn
+  automatisch neu, falls der Prozess mal abstuerzt (`Restart=always`, ohne
+  Limit fuer die Anzahl der Neustarts - ein kurzer Internetausfall o.ae.
+  beendet den Bot also nicht dauerhaft).
+- Logs landen im systemd-Journal (`journalctl -u kita-bot -f`) statt in
+  einer eigenen Log-Datei - kein zusaetzliches Log-Management noetig.
+- Neuer README-Abschnitt "Als systemd-Dienst laufen lassen" (siehe unten)
+  mit Schritt-fuer-Schritt-Anleitung, inkl. dem wichtigen Hinweis, den Bot
+  VOR dem Einrichten des Dienstes einmal manuell zu starten - der erste
+  Start braucht einen QR-Code-Scan, der nur in einem echten, interaktiven
+  Terminal funktioniert, nicht als Hintergrund-Dienst.
+
+Reine Betriebs-/Konfigurationsaenderung, kein Code in `src/` veraendert -
+weiterhin 206/206 bestehende Tests gruen.
+
 ## Wichtiger Hinweis zur Node.js-Version
 
 Dieses Projekt braucht **Node.js 22** (in `.nvmrc` und `package.json`
@@ -337,6 +356,79 @@ Hinweis: Im Hauptmenue gibt es jetzt Option 2 fuer **persoenliche
 Erinnerungen** - diese gehen nur an den Ersteller selbst (privater Chat),
 nicht in die Gruppe, und man kann eine eigene Uhrzeit dafuer waehlen. Der
 Scheduler prueft jede Minute im Hintergrund, ob etwas faellig ist.
+
+## Als systemd-Dienst laufen lassen (automatischer Start + Neustart bei Absturz)
+
+Damit der Bot dauerhaft im Hintergrund laeuft - startet automatisch beim
+Hochfahren des Pi und startet sich selbst neu, falls der Prozess mal
+abstuerzt - kann er als systemd-Dienst eingerichtet werden. Dann ist kein
+offenes Terminal, kein `screen` und kein `nohup` mehr noetig.
+
+**Wichtig - zuerst einmal ganz normal manuell starten:** Der allererste
+Start braucht einen QR-Code zum Scannen (siehe oben, Schritte 5-6 unter
+"Setup auf dem Raspberry Pi"). Das funktioniert nur in einem echten,
+interaktiven Terminal - nicht als Hintergrund-Dienst. Also erst `npm start`
+von Hand ausfuehren, QR-Code scannen, pruefen dass der `auth/`-Ordner
+gefuellt ist und der Bot normal reagiert. **Erst danach** den systemd-
+Dienst einrichten - die gespeicherte Session in `auth/` wird dann
+automatisch wiederverwendet, kein erneuter QR-Code noetig.
+
+1. Node-Pfad herausfinden (wichtig, falls Node ueber `nvm` installiert
+   wurde - systemd kennt `nvm` nicht und findet `node` sonst nicht):
+   ```
+   which node
+   ```
+   Beispiel-Ausgabe: `/home/pi/.nvm/versions/node/v22.20.0/bin/node`
+
+2. `kita-bot.service` (liegt im Projekt-Hauptordner) mit einem Editor
+   oeffnen (z.B. `nano kita-bot.service`) und drei Werte anpassen:
+   - `User=` / `Group=` - dein Benutzername auf dem Pi (`whoami` zeigt ihn)
+   - `WorkingDirectory=` - der volle Pfad zum Projektordner (`pwd` im
+     Projektordner zeigt ihn)
+   - `ExecStart=` - der Node-Pfad aus Schritt 1, gefolgt von einem
+     Leerzeichen und dem vollen Pfad zu `src/bot.js`
+
+3. Datei nach `/etc/systemd/system/` kopieren:
+   ```
+   sudo cp kita-bot.service /etc/systemd/system/kita-bot.service
+   ```
+
+4. Dienst aktivieren und sofort starten:
+   ```
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now kita-bot
+   ```
+   `enable` sorgt dafuer, dass der Bot bei jedem Neustart des Pi automatisch
+   mitstartet. `--now` startet ihn zusaetzlich sofort, ohne auf den naechsten
+   Neustart warten zu muessen.
+
+5. Status pruefen:
+   ```
+   sudo systemctl status kita-bot
+   ```
+   Sollte `active (running)` zeigen. Falls nicht: Schritt 6 (Logs) zeigt
+   meistens sofort, woran es liegt (haeufigste Ursache: falscher Node-Pfad
+   in `ExecStart=`).
+
+6. Live-Logs ansehen (entspricht dem, was frueher im Terminal zu sehen war):
+   ```
+   journalctl -u kita-bot -f
+   ```
+   (`-f` = "follow", zeigt neue Zeilen live mit; ohne `-f` werden alle
+   bisherigen Log-Zeilen angezeigt. `Strg+C` zum Beenden.)
+
+Nuetzliche Befehle danach:
+```
+sudo systemctl stop kita-bot      # Bot anhalten
+sudo systemctl restart kita-bot   # Bot neu starten (z.B. nach einer Aenderung an config.js)
+sudo systemctl disable kita-bot   # Autostart beim Booten wieder abschalten
+```
+
+Der Dienst ist so eingestellt, dass er sich nach einem Absturz automatisch
+nach 10 Sekunden neu startet - unbegrenzt oft, ohne dass systemd irgendwann
+aufgibt (`Restart=always` zusammen mit `StartLimitIntervalSec=0`). Ein
+einzelner Absturz (z.B. durch einen kurzzeitigen Internetausfall) beendet
+den Bot also nicht dauerhaft.
 
 ## Wichtig
 

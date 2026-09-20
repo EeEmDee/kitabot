@@ -1,0 +1,32 @@
+[Unit]
+Description=Kita-Bot WhatsApp Erinnerungs-Bot
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+
+# ANPASSEN vor dem Einrichten - siehe README.md, Abschnitt
+# "Als systemd-Dienst laufen lassen":
+#   User/Group           -> `whoami` auf dem Pi
+#   WorkingDirectory      -> `pwd` im Projektordner
+#   ExecStart (Node-Pfad) -> `which node` auf dem Pi (wichtig bei nvm!)
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/kita-bot
+ExecStart=/home/pi/.nvm/versions/node/v22.20.0/bin/node /home/pi/kita-bot/src/bot.js
+
+# Bei einem Absturz automatisch neu starten, unbegrenzt oft (kein
+# StartLimitBurst-Abbruch dank StartLimitIntervalSec=0 oben).
+Restart=always
+RestartSec=10
+TimeoutStopSec=15
+
+# Ausgabe landet im systemd-Journal: "journalctl -u kita-bot -f"
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kita-bot
+
+[Install]
+WantedBy=multi-user.target
